@@ -52,7 +52,7 @@ const doTask = async (cloudClient, familyID) => {
     for (let i = 0; i < threadx; i++) {
       signPromises2.push((async () => {
         try {
-          const res = await cloudClient.familyUserSign(family.familyId);
+          const res = await cloudClient.familyUserSign(165515815004439);
           if (!res.signStatus) {
             getSpace.push(` ${res.bonusSpace}`);
           }
