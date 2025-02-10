@@ -21,7 +21,7 @@ log4js.configure({
 
 const logger = log4js.getLogger();
 
-// 掩码函数，用于隐藏部分用户名信息
+// 掩码函数
 const mask = (s, start, end) => s.split("").fill("*", start, end).join("");
 
 // 执行签到任务
@@ -120,7 +120,7 @@ const pushWxPusher = (title, desp, WX_PUSHER_APP_TOKEN, WX_PUSHER_UID) => {
                 return;
             }
             const json = JSON.parse(res.text);
-            if (json.data[0].code !== 1000) {
+            if (json.data[0].code!== 1000) {
                 logger.error(`wxPusher推送失败:${JSON.stringify(json)}`);
             } else {
                 logger.info("wxPusher推送成功");
@@ -128,13 +128,12 @@ const pushWxPusher = (title, desp, WX_PUSHER_APP_TOKEN, WX_PUSHER_UID) => {
         });
 };
 
-// 统一的消息推送函数，调用 Telegram Bot 和 WxPusher 推送
+// 推送消息
 const push = (title, desp, telegramBotToken, telegramBotId, WX_PUSHER_APP_TOKEN, WX_PUSHER_UID) => {
     pushWxPusher(title, desp, WX_PUSHER_APP_TOKEN, WX_PUSHER_UID);
     pushTelegramBot(title, desp, telegramBotToken, telegramBotId);
 };
 
-// 从配置文件中获取相关环境变量
 const env = require("./env");
 let accounts = env.tyys;
 let WX_PUSHER_UID = env.WX_PUSHER_UID;
@@ -149,10 +148,11 @@ const main = async () => {
 
     let mainUserName, mainPassword;
     let pushLog = [];
+    let totalFamilyGain = 0;
 
     for (let i = 0; i < accounts.length; i += 2) {
         const [userName, password] = accounts.slice(i, i + 2);
-        if (!userName || !password) continue;
+        if (!userName ||!password) continue;
 
         const userNameInfo = mask(userName, 3, 7);
         const accountIndex = (i / 2) + 1;
@@ -168,6 +168,7 @@ const main = async () => {
 
             const personalChange = (cloudCapacityInfo.totalSize - cloudCapacityInfo0.totalSize) / 1024 / 1024;
             const familyChange = (familyCapacityInfo.totalSize - familyCapacityInfo0.totalSize) / 1024 / 1024;
+            totalFamilyGain += familyChange;
 
             const line = `账户${String(accountIndex).padStart(2, '0')}：实际 个人+ ${String(personalChange.toFixed(0)).padStart(3, ' ')}M, 家庭+ ${String(familyChange.toFixed(0)).padStart(3, ' ')}M`;
             pushLog.push(line);
@@ -188,14 +189,17 @@ const main = async () => {
         const cloudClient = new CloudClient(mainUserName, mainPassword);
         await cloudClient.login();
         const { cloudCapacityInfo, familyCapacityInfo } = await cloudClient.getUserSizeInfo();
-        const personalTotal = (cloudCapacityInfo.totalSize / 1024 / 1024 / 1024).toFixed(0);
-        const familyTotal = (familyCapacityInfo.totalSize / 1024 / 1024 / 1024).toFixed(0);
-        const personalChange = (cloudCapacityInfo.totalSize - cloudCapacityInfo.usedSize) / 1024 / 1024;
-        const familyChange = (familyCapacityInfo.totalSize - familyCapacityInfo.usedSize) / 1024 / 1024;
+        const personalTotal = (cloudCapacityInfo.totalSize / 1024 / 1024 / 1024).toFixed(2);
+        const familyTotal = (familyCapacityInfo.totalSize / 1024 / 1024 / 1024).toFixed(2);
+        const { cloudCapacityInfo: mainCloudCapacityInfo0 } = await cloudClient.getUserSizeInfo();
+        await doTask(cloudClient, env.FAMILY_ID, threadx, familySignParam);
+        const { cloudCapacityInfo: mainCloudCapacityInfo } = await cloudClient.getUserSizeInfo();
+        const personalGain = (mainCloudCapacityInfo.totalSize - mainCloudCapacityInfo0.totalSize) / 1024 / 1024;
 
-        const indent = " ".repeat(10);
-        const mainLine1 = `主帐号：个人总容量${String(personalTotal).padStart(3, ' ')}G（个人+${String(personalChange.toFixed(0)).padStart(3, ' ')}M）`;
-        const mainLine2 = `${indent}家庭总容量${String(familyTotal).padStart(3, ' ')}G（家庭+${String(familyChange.toFixed(0)).padStart(3, ' ')}M）`;
+        const personalSymbol = "📋";
+        const familySymbol = "🏠";
+        const mainLine1 = `${personalSymbol} 个人总容量 ${String(personalTotal).padStart(6, ' ')}G（个人+${String(personalGain.toFixed(2)).padStart(5, ' ')}M）`;
+        const mainLine2 = `${familySymbol} 家庭总容量 ${String(familyTotal).padStart(6, ' ')}G（家庭+${String(totalFamilyGain.toFixed(2)).padStart(5, ' ')}M）`;
         pushLog.push(mainLine1);
         pushLog.push(mainLine2);
     }
